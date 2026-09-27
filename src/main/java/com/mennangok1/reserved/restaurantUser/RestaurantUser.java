@@ -17,10 +17,10 @@ public class RestaurantUser {
     private Long id;
 
     @OneToOne (fetch = FetchType.LAZY)
-    @JoinColumn (name = "USER_ID")
+    @JoinColumn (name = "USER_ID", nullable = false)
     private User user;
 
     @ManyToOne (fetch = FetchType.LAZY)
-    @JoinColumn (name = "RESTAURANT_ID")
+    @JoinColumn (name = "RESTAURANT_ID", nullable = false)
     private Restaurant restaurant;
 }

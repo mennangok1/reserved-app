@@ -23,11 +23,11 @@ public class Reservation {
     private LocalDateTime endDate;
 
     @ManyToOne (fetch =  FetchType.LAZY)
-    @JoinColumn (name = "TABLE_ID")
+    @JoinColumn (name = "TABLE_ID", nullable = false)
     private RestaurantTable restaurantTable;
 
     @ManyToOne (fetch =  FetchType.LAZY)
-    @JoinColumn (name = "CUSTOMER_USER_ID")
+    @JoinColumn (name = "CUSTOMER_USER_ID", nullable = false)
     private CustomerUser customerUser;
 
     @Enumerated(EnumType.STRING)

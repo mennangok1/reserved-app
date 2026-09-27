@@ -19,12 +19,12 @@ public class TableHold {
     @Column (name = "EXPIRES_AT")
     private LocalDateTime expiresAt;
 
-    @ManyToOne
-    @JoinColumn (name = "TABLE_ID")
+    @ManyToOne (fetch = FetchType.LAZY)
+    @JoinColumn (name = "TABLE_ID", nullable = false)
     private RestaurantTable restaurantTable;
 
-    @ManyToOne
-    @JoinColumn (name = "CUSTOMER_ID")
+    @ManyToOne (fetch = FetchType.LAZY)
+    @JoinColumn (name = "CUSTOMER_ID", nullable = false)
     private CustomerUser customerUser;
 
 

@@ -19,6 +19,6 @@ public class RestaurantTable {
     private Long capacity;
 
     @ManyToOne (fetch = FetchType.LAZY)
-    @JoinColumn (name = "RESTAURANT_ID")
+    @JoinColumn (name = "RESTAURANT_ID", nullable = false)
     private Restaurant restaurant;
 }
