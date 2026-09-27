@@ -29,7 +29,7 @@ public class MenuItem {
     private Long menuOrder;
 
     @ManyToOne (fetch =  FetchType.LAZY)
-    @JoinColumn (name = "ITEM_TYPE")
+    @JoinColumn (name = "ITEM_TYPE_ID")
     private ItemType itemType;
 
     @ManyToOne (fetch = FetchType.LAZY)

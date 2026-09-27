@@ -30,7 +30,7 @@ public class Reservation {
     @JoinColumn (name = "CUSTOMER_USER_ID")
     private CustomerUser customerUser;
 
-    @Enumerated(EnumType.ORDINAL)
+    @Enumerated(EnumType.STRING)
     @Column(name = "STATUS")
     private ReservationStatus status;
 
