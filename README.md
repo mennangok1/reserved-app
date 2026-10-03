@@ -111,4 +111,4 @@ Schema changes go through Flyway, plain sequential SQL (`V1__create_core_schema.
 
 ## Decision records
 
-Non-trivial decisions (concurrency, authorization, schema shape) are written up as short ADRs before implementation: what changed, why, alternatives considered, and known risk/debt. See [`architecture/`](architecture/) for the MVP scope doc and per-issue notes, and `docs/decisions/` for the ADR log.
+Non-trivial decisions (concurrency, authorization, schema shape) are written up as short ADRs before implementation: what changed, why, alternatives considered, and known risk/debt. See [`docs/architecture`](docs/architecture/) for the MVP scope doc and per-issue notes, and `docs/decisions/` for the ADR log.

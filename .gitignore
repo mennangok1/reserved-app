@@ -34,3 +34,7 @@ build/
 .vscode/
 
 application-local.properties
+
+CLAUDE.md
+/requestCollection/
+/docs/decisions
