@@ -1,6 +1,7 @@
 package com.mennangok1.reserved.security;
 
 import jakarta.servlet.DispatcherType;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -13,6 +14,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
@@ -44,11 +46,22 @@ public class SecurityConfig {
         return config.getAuthenticationManager();
     }
 
+    // Without this, Spring Security has no registered "challenge" mechanism (no httpBasic()/formLogin(),
+    // since auth is handled by our own JwtAuthenticationFilter) and falls back to Http403ForbiddenEntryPoint,
+    // returning 403 for requests with no/invalid credentials. That conflates "who are you?" (401) with
+    // "I know who you are, but no" (403) - see PermissionService for the real 403 case.
+    @Bean
+    public AuthenticationEntryPoint authenticationEntryPoint() {
+        return (request, response, authException) ->
+                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Full authentication is required to access this resource");
+    }
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(authenticationEntryPoint()))
                 .authorizeHttpRequests(auth -> auth
                         // Spring Security 6+ locks down every dispatcher type by default, including the
                         // internal forward Boot's error handling makes to /error after a thrown
