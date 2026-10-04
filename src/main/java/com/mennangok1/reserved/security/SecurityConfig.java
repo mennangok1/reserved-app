@@ -1,5 +1,6 @@
 package com.mennangok1.reserved.security;
 
+import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -49,7 +50,12 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/auth/register", "/auth/login").permitAll()
+                        // Spring Security 6+ locks down every dispatcher type by default, including the
+                        // internal forward Boot's error handling makes to /error after a thrown
+                        // ResponseStatusException. Without this, that forward gets denied and the client
+                        // sees a bare 403 instead of the exception's real status code (404, 409, ...).
+                        .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
+                        .requestMatchers("/auth/register", "/auth/register/restaurant-user", "/auth/login").permitAll()
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())

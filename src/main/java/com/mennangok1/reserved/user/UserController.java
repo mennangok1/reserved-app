@@ -26,6 +26,12 @@ class UserController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
+    @PostMapping("/register/restaurant-user")
+    ResponseEntity<UserResponse> registerRestaurantUser(@Valid @RequestBody RegisterRequest request) {
+        UserResponse response = userService.registerRestaurantUser(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
     @PostMapping("/login")
     ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         LoginResponse response = userService.login(request);

@@ -18,6 +18,7 @@ import org.springframework.web.server.ResponseStatusException;
 public class UserService {
 
     private static final String DEFAULT_REGISTRATION_ROLE = "CUSTOMER";
+    private static final String RESTAURANT_USER_ROLE = "RESTAURANT_USER";
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
@@ -41,21 +42,30 @@ public class UserService {
 
     @Transactional
     public UserResponse register(RegisterRequest request) {
+        return registerWithRole(request, DEFAULT_REGISTRATION_ROLE);
+    }
+
+    @Transactional
+    public UserResponse registerRestaurantUser(RegisterRequest request) {
+        return registerWithRole(request, RESTAURANT_USER_ROLE);
+    }
+
+    private UserResponse registerWithRole(RegisterRequest request, String roleName) {
         String email = request.email().toLowerCase();
 
         if (userRepository.existsByEmail(email)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Email is already registered");
         }
 
-        Role customerRole = roleRepository.findByName(DEFAULT_REGISTRATION_ROLE)
-                .orElseThrow(() -> new IllegalStateException(DEFAULT_REGISTRATION_ROLE + " role is not seeded"));
+        Role role = roleRepository.findByName(roleName)
+                .orElseThrow(() -> new IllegalStateException(roleName + " role is not seeded"));
 
         User user = new User();
         user.setName(request.name());
         user.setEmail(email);
         user.setPassword(passwordEncoder.encode(request.password()));
         user.setPhoneNumber(request.phoneNumber());
-        user.setRole(customerRole);
+        user.setRole(role);
 
         User saved = userRepository.save(user);
 
