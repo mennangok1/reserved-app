@@ -3,6 +3,7 @@ package com.mennangok1.reserved.menuItem;
 import com.mennangok1.reserved.itemType.ItemType;
 import com.mennangok1.reserved.itemType.ItemTypeRepository;
 import com.mennangok1.reserved.restaurant.Restaurant;
+import com.mennangok1.reserved.restaurant.RestaurantRepository;
 import com.mennangok1.reserved.restaurantUser.RestaurantUserRepository;
 import com.mennangok1.reserved.roleAction.PermissionService;
 import com.mennangok1.reserved.user.User;
@@ -19,17 +20,20 @@ public class MenuItemService {
     private final MenuItemRepository menuItemRepository;
     private final ItemTypeRepository itemTypeRepository;
     private final RestaurantUserRepository restaurantUserRepository;
+    private final RestaurantRepository restaurantRepository;
     private final PermissionService permissionService;
 
     public MenuItemService(
             MenuItemRepository menuItemRepository,
             ItemTypeRepository itemTypeRepository,
             RestaurantUserRepository restaurantUserRepository,
+            RestaurantRepository restaurantRepository,
             PermissionService permissionService
     ) {
         this.menuItemRepository = menuItemRepository;
         this.itemTypeRepository = itemTypeRepository;
         this.restaurantUserRepository = restaurantUserRepository;
+        this.restaurantRepository = restaurantRepository;
         this.permissionService = permissionService;
     }
 
@@ -89,8 +93,17 @@ public class MenuItemService {
         menuItemRepository.delete(menuItem);
     }
 
-    // Resource-based check (decision #1): RBAC above only answered "can this role manage menu items at all" —
-    // this answers "on which restaurant", separately.
+    public List<MenuItemResponse> listByRestaurant(User currentUser, Long restaurantId) {
+        permissionService.requirePermission(currentUser, "RESTAURANT_READ");
+
+        Restaurant restaurant = restaurantRepository.findById(restaurantId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Restaurant not found"));
+
+        return menuItemRepository.findByRestaurant_Id(restaurant.getId()).stream()
+                .map(MenuItemResponse::from)
+                .toList();
+    }
+
     private Restaurant resolveOwnRestaurant(User currentUser) {
         return restaurantUserRepository.findByUser_Id(currentUser.getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "You don't manage a restaurant yet"))

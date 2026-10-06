@@ -3,6 +3,7 @@ package com.mennangok1.reserved.menuItem;
 import com.mennangok1.reserved.itemType.ItemType;
 import com.mennangok1.reserved.itemType.ItemTypeRepository;
 import com.mennangok1.reserved.restaurant.Restaurant;
+import com.mennangok1.reserved.restaurant.RestaurantRepository;
 import com.mennangok1.reserved.restaurantUser.RestaurantUser;
 import com.mennangok1.reserved.restaurantUser.RestaurantUserRepository;
 import com.mennangok1.reserved.roleAction.PermissionService;
@@ -35,6 +36,8 @@ class MenuItemServiceTest {
     private ItemTypeRepository itemTypeRepository;
     @Mock
     private RestaurantUserRepository restaurantUserRepository;
+    @Mock
+    private RestaurantRepository restaurantRepository;
     @Mock
     private PermissionService permissionService;
 
@@ -234,6 +237,50 @@ class MenuItemServiceTest {
         menuItemService.delete(restaurantUser, 100L);
 
         verify(menuItemRepository).delete(existing);
+    }
+
+    @Test
+    void listByRestaurant_returnsItems_forAnyRestaurant() {
+        User customer = user(1L);
+        Restaurant otherRestaurant = restaurant(20L);
+        ItemType type = itemType(2L);
+
+        when(restaurantRepository.findById(20L)).thenReturn(Optional.of(otherRestaurant));
+        when(menuItemRepository.findByRestaurant_Id(20L))
+                .thenReturn(List.of(menuItem(100L, otherRestaurant, type)));
+
+        List<MenuItemResponse> response = menuItemService.listByRestaurant(customer, 20L);
+
+        assertThat(response).hasSize(1);
+        assertThat(response.get(0).restaurantId()).isEqualTo(20L);
+        verify(restaurantUserRepository, never()).findByUser_Id(any());
+    }
+
+    @Test
+    void listByRestaurant_throwsNotFound_whenRestaurantMissing() {
+        User customer = user(1L);
+
+        when(restaurantRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> menuItemService.listByRestaurant(customer, 999L))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(ex -> ((ResponseStatusException) ex).getStatusCode().value())
+                .isEqualTo(404);
+    }
+
+    @Test
+    void listByRestaurant_throwsForbidden_whenPermissionMissing() {
+        User customer = user(1L);
+
+        doThrow(new ResponseStatusException(FORBIDDEN)).when(permissionService)
+                .requirePermission(customer, "RESTAURANT_READ");
+
+        assertThatThrownBy(() -> menuItemService.listByRestaurant(customer, 20L))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(ex -> ((ResponseStatusException) ex).getStatusCode().value())
+                .isEqualTo(403);
+
+        verify(restaurantRepository, never()).findById(any());
     }
 
 }

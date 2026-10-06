@@ -3,6 +3,7 @@ package com.mennangok1.reserved.restaurant;
 import com.mennangok1.reserved.restaurantUser.RestaurantUser;
 import com.mennangok1.reserved.restaurantUser.RestaurantUserRepository;
 import com.mennangok1.reserved.role.Role;
+import com.mennangok1.reserved.roleAction.PermissionService;
 import com.mennangok1.reserved.user.User;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -10,13 +11,16 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -28,6 +32,8 @@ class RestaurantServiceTest {
     private RestaurantRepository restaurantRepository;
     @Mock
     private RestaurantUserRepository restaurantUserRepository;
+    @Mock
+    private PermissionService permissionService;
 
     @InjectMocks
     private RestaurantService restaurantService;
@@ -131,6 +137,93 @@ class RestaurantServiceTest {
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting(ex -> ((ResponseStatusException) ex).getStatusCode().value())
                 .isEqualTo(403);
+    }
+
+    @Test
+    void listRestaurants_returnsAll_whenNoNameFilterGiven() {
+        User customer = userWithRole(1L, "CUSTOMER");
+        Restaurant restaurantA = new Restaurant();
+        restaurantA.setId(10L);
+        restaurantA.setName("Chez Jane");
+
+        when(restaurantRepository.findAll()).thenReturn(List.of(restaurantA));
+
+        List<RestaurantResponse> response = restaurantService.listRestaurants(customer, null);
+
+        assertThat(response).hasSize(1);
+        assertThat(response.get(0).id()).isEqualTo(10L);
+        verify(restaurantRepository, never()).findByNameContainingIgnoreCase(any());
+    }
+
+    @Test
+    void listRestaurants_filtersByName_whenNameGiven() {
+        User customer = userWithRole(1L, "CUSTOMER");
+        Restaurant restaurantA = new Restaurant();
+        restaurantA.setId(10L);
+        restaurantA.setName("Chez Jane");
+
+        when(restaurantRepository.findByNameContainingIgnoreCase("jane")).thenReturn(List.of(restaurantA));
+
+        List<RestaurantResponse> response = restaurantService.listRestaurants(customer, "jane");
+
+        assertThat(response).hasSize(1);
+        verify(restaurantRepository, never()).findAll();
+    }
+
+    @Test
+    void listRestaurants_throwsForbidden_whenPermissionMissing() {
+        User restaurantUser = userWithRole(1L, "RESTAURANT_USER");
+
+        doThrow(new ResponseStatusException(HttpStatus.FORBIDDEN)).when(permissionService)
+                .requirePermission(restaurantUser, "RESTAURANT_READ");
+
+        assertThatThrownBy(() -> restaurantService.listRestaurants(restaurantUser, null))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(ex -> ((ResponseStatusException) ex).getStatusCode().value())
+                .isEqualTo(403);
+
+        verify(restaurantRepository, never()).findAll();
+    }
+
+    @Test
+    void getRestaurant_returnsRestaurant_whenFound() {
+        User customer = userWithRole(1L, "CUSTOMER");
+        Restaurant restaurant = new Restaurant();
+        restaurant.setId(10L);
+        restaurant.setName("Chez Jane");
+
+        when(restaurantRepository.findById(10L)).thenReturn(Optional.of(restaurant));
+
+        RestaurantResponse response = restaurantService.getRestaurant(customer, 10L);
+
+        assertThat(response.id()).isEqualTo(10L);
+    }
+
+    @Test
+    void getRestaurant_throwsNotFound_whenMissing() {
+        User customer = userWithRole(1L, "CUSTOMER");
+
+        when(restaurantRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> restaurantService.getRestaurant(customer, 999L))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(ex -> ((ResponseStatusException) ex).getStatusCode().value())
+                .isEqualTo(404);
+    }
+
+    @Test
+    void getRestaurant_throwsForbidden_whenPermissionMissing() {
+        User restaurantUser = userWithRole(1L, "RESTAURANT_USER");
+
+        doThrow(new ResponseStatusException(HttpStatus.FORBIDDEN)).when(permissionService)
+                .requirePermission(restaurantUser, "RESTAURANT_READ");
+
+        assertThatThrownBy(() -> restaurantService.getRestaurant(restaurantUser, 10L))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(ex -> ((ResponseStatusException) ex).getStatusCode().value())
+                .isEqualTo(403);
+
+        verify(restaurantRepository, never()).findById(any());
     }
 
 }
