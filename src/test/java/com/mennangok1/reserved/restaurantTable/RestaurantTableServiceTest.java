@@ -4,6 +4,8 @@ import com.mennangok1.reserved.restaurant.Restaurant;
 import com.mennangok1.reserved.restaurantUser.RestaurantUser;
 import com.mennangok1.reserved.restaurantUser.RestaurantUserRepository;
 import com.mennangok1.reserved.roleAction.PermissionService;
+import com.mennangok1.reserved.tableHold.TableHold;
+import com.mennangok1.reserved.tableHold.TableHoldRepository;
 import com.mennangok1.reserved.user.User;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -12,6 +14,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -31,6 +34,8 @@ class RestaurantTableServiceTest {
     private RestaurantTableRepository restaurantTableRepository;
     @Mock
     private RestaurantUserRepository restaurantUserRepository;
+    @Mock
+    private TableHoldRepository tableHoldRepository;
     @Mock
     private PermissionService permissionService;
 
@@ -63,6 +68,12 @@ class RestaurantTableServiceTest {
         restaurantTable.setCapacity(4L);
         restaurantTable.setRestaurant(restaurant);
         return restaurantTable;
+    }
+
+    private TableHold holdExpiringAt(LocalDateTime expiresAt) {
+        TableHold hold = new TableHold();
+        hold.setExpiresAt(expiresAt);
+        return hold;
     }
 
     @Test
@@ -193,6 +204,42 @@ class RestaurantTableServiceTest {
 
         when(restaurantUserRepository.findByUser_Id(1L)).thenReturn(Optional.of(linkFor(restaurantUser, ownRestaurant)));
         when(restaurantTableRepository.findById(100L)).thenReturn(Optional.of(existing));
+        when(tableHoldRepository.findByRestaurantTable_Id(100L)).thenReturn(List.of());
+
+        restaurantTableService.delete(restaurantUser, 100L);
+
+        verify(restaurantTableRepository).delete(existing);
+    }
+
+    @Test
+    void delete_throwsConflict_whenActiveHoldExists() {
+        User restaurantUser = user(1L);
+        Restaurant ownRestaurant = restaurant(10L);
+        RestaurantTable existing = restaurantTable(100L, ownRestaurant);
+
+        when(restaurantUserRepository.findByUser_Id(1L)).thenReturn(Optional.of(linkFor(restaurantUser, ownRestaurant)));
+        when(restaurantTableRepository.findById(100L)).thenReturn(Optional.of(existing));
+        when(tableHoldRepository.findByRestaurantTable_Id(100L))
+                .thenReturn(List.of(holdExpiringAt(LocalDateTime.now().plusMinutes(5))));
+
+        assertThatThrownBy(() -> restaurantTableService.delete(restaurantUser, 100L))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(ex -> ((ResponseStatusException) ex).getStatusCode().value())
+                .isEqualTo(409);
+
+        verify(restaurantTableRepository, never()).delete(any());
+    }
+
+    @Test
+    void delete_succeeds_whenOnlyExpiredHoldExists() {
+        User restaurantUser = user(1L);
+        Restaurant ownRestaurant = restaurant(10L);
+        RestaurantTable existing = restaurantTable(100L, ownRestaurant);
+
+        when(restaurantUserRepository.findByUser_Id(1L)).thenReturn(Optional.of(linkFor(restaurantUser, ownRestaurant)));
+        when(restaurantTableRepository.findById(100L)).thenReturn(Optional.of(existing));
+        when(tableHoldRepository.findByRestaurantTable_Id(100L))
+                .thenReturn(List.of(holdExpiringAt(LocalDateTime.now().minusMinutes(1))));
 
         restaurantTableService.delete(restaurantUser, 100L);
 

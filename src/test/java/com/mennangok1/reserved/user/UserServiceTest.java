@@ -1,5 +1,7 @@
 package com.mennangok1.reserved.user;
 
+import com.mennangok1.reserved.customerUser.CustomerUser;
+import com.mennangok1.reserved.customerUser.CustomerUserRepository;
 import com.mennangok1.reserved.role.Role;
 import com.mennangok1.reserved.role.RoleRepository;
 import com.mennangok1.reserved.security.JwtService;
@@ -22,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -32,6 +35,8 @@ class UserServiceTest {
     private UserRepository userRepository;
     @Mock
     private RoleRepository roleRepository;
+    @Mock
+    private CustomerUserRepository customerUserRepository;
     @Mock
     private PasswordEncoder passwordEncoder;
     @Mock
@@ -74,6 +79,10 @@ class UserServiceTest {
         assertThat(savedUser.getValue().getPassword()).isEqualTo("hashed");
         assertThat(savedUser.getValue().getRole().getName()).isEqualTo("CUSTOMER");
         assertThat(response.role()).isEqualTo("CUSTOMER");
+
+        ArgumentCaptor<CustomerUser> savedCustomerUser = ArgumentCaptor.forClass(CustomerUser.class);
+        verify(customerUserRepository).save(savedCustomerUser.capture());
+        assertThat(savedCustomerUser.getValue().getUser()).isEqualTo(savedUser.getValue());
     }
 
     @Test
@@ -100,6 +109,7 @@ class UserServiceTest {
         UserResponse response = userService.registerRestaurantUser(request);
 
         assertThat(response.role()).isEqualTo("RESTAURANT_USER");
+        verify(customerUserRepository, never()).save(any());
     }
 
     @Test

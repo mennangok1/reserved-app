@@ -1,5 +1,7 @@
 package com.mennangok1.reserved.user;
 
+import com.mennangok1.reserved.customerUser.CustomerUser;
+import com.mennangok1.reserved.customerUser.CustomerUserRepository;
 import com.mennangok1.reserved.role.Role;
 import com.mennangok1.reserved.role.RoleRepository;
 import com.mennangok1.reserved.security.JwtService;
@@ -22,6 +24,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final CustomerUserRepository customerUserRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
@@ -29,12 +32,14 @@ public class UserService {
     public UserService(
             UserRepository userRepository,
             RoleRepository roleRepository,
+            CustomerUserRepository customerUserRepository,
             PasswordEncoder passwordEncoder,
             AuthenticationManager authenticationManager,
             JwtService jwtService
     ) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
+        this.customerUserRepository = customerUserRepository;
         this.passwordEncoder = passwordEncoder;
         this.authenticationManager = authenticationManager;
         this.jwtService = jwtService;
@@ -68,6 +73,12 @@ public class UserService {
         user.setRole(role);
 
         User saved = userRepository.save(user);
+
+        if (DEFAULT_REGISTRATION_ROLE.equals(roleName)) {
+            CustomerUser customerUser = new CustomerUser();
+            customerUser.setUser(saved);
+            customerUserRepository.save(customerUser);
+        }
 
         return UserResponse.from(saved);
     }

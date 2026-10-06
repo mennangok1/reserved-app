@@ -3,12 +3,14 @@ package com.mennangok1.reserved.restaurantTable;
 import com.mennangok1.reserved.restaurant.Restaurant;
 import com.mennangok1.reserved.restaurantUser.RestaurantUserRepository;
 import com.mennangok1.reserved.roleAction.PermissionService;
+import com.mennangok1.reserved.tableHold.TableHoldRepository;
 import com.mennangok1.reserved.user.User;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -16,15 +18,18 @@ public class RestaurantTableService {
 
     private final RestaurantTableRepository restaurantTableRepository;
     private final RestaurantUserRepository restaurantUserRepository;
+    private final TableHoldRepository tableHoldRepository;
     private final PermissionService permissionService;
 
     public RestaurantTableService(
             RestaurantTableRepository restaurantTableRepository,
             RestaurantUserRepository restaurantUserRepository,
+            TableHoldRepository tableHoldRepository,
             PermissionService permissionService
     ) {
         this.restaurantTableRepository = restaurantTableRepository;
         this.restaurantUserRepository = restaurantUserRepository;
+        this.tableHoldRepository = tableHoldRepository;
         this.permissionService = permissionService;
     }
 
@@ -72,6 +77,12 @@ public class RestaurantTableService {
 
         Restaurant ownRestaurant = resolveOwnRestaurant(currentUser);
         RestaurantTable restaurantTable = resolveOwnedTable(tableId, ownRestaurant.getId());
+
+        boolean hasActiveHold = tableHoldRepository.findByRestaurantTable_Id(restaurantTable.getId()).stream()
+                .anyMatch(hold -> hold.getExpiresAt().isAfter(LocalDateTime.now()));
+        if (hasActiveHold) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Table has an active hold and cannot be deleted");
+        }
 
         restaurantTableRepository.delete(restaurantTable);
     }
