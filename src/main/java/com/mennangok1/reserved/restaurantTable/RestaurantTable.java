@@ -15,6 +15,9 @@ public class RestaurantTable {
     @Column (name = "ID")
     private Long id;
 
+    @Column (name = "LABEL")
+    private String label;
+
     @Column (name = "CAPACITY")
     private Long capacity;
 
