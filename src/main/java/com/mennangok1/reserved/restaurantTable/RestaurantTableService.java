@@ -1,6 +1,9 @@
 package com.mennangok1.reserved.restaurantTable;
 
+import com.mennangok1.reserved.reservation.ReservationRepository;
+import com.mennangok1.reserved.reservation.ReservationStatus;
 import com.mennangok1.reserved.restaurant.Restaurant;
+import com.mennangok1.reserved.restaurant.RestaurantRepository;
 import com.mennangok1.reserved.restaurantUser.RestaurantUserRepository;
 import com.mennangok1.reserved.roleAction.PermissionService;
 import com.mennangok1.reserved.tableHold.TableHoldRepository;
@@ -18,18 +21,24 @@ public class RestaurantTableService {
 
     private final RestaurantTableRepository restaurantTableRepository;
     private final RestaurantUserRepository restaurantUserRepository;
+    private final RestaurantRepository restaurantRepository;
     private final TableHoldRepository tableHoldRepository;
+    private final ReservationRepository reservationRepository;
     private final PermissionService permissionService;
 
     public RestaurantTableService(
             RestaurantTableRepository restaurantTableRepository,
             RestaurantUserRepository restaurantUserRepository,
+            RestaurantRepository restaurantRepository,
             TableHoldRepository tableHoldRepository,
+            ReservationRepository reservationRepository,
             PermissionService permissionService
     ) {
         this.restaurantTableRepository = restaurantTableRepository;
         this.restaurantUserRepository = restaurantUserRepository;
+        this.restaurantRepository = restaurantRepository;
         this.tableHoldRepository = tableHoldRepository;
+        this.reservationRepository = reservationRepository;
         this.permissionService = permissionService;
     }
 
@@ -84,7 +93,38 @@ public class RestaurantTableService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Table has an active hold and cannot be deleted");
         }
 
+        boolean hasActiveReservation = reservationRepository.findByRestaurantTable_Id(restaurantTable.getId()).stream()
+                .anyMatch(reservation -> reservation.getStatus() == ReservationStatus.ACTIVE);
+        if (hasActiveReservation) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Table has an active reservation and cannot be deleted");
+        }
+
         restaurantTableRepository.delete(restaurantTable);
+    }
+
+    // Customer-facing: lets a CUSTOMER discover a table to hold/reserve. Reuses RESTAURANT_READ
+    // (not a RESTAURANT_TABLE_* action) since this is a resource-scoped "view this restaurant" read,
+    // the same reasoning ADR-004 used for MenuItemService.listByRestaurant.
+    public List<RestaurantTableAvailabilityResponse> listByRestaurant(User currentUser, Long restaurantId) {
+        permissionService.requirePermission(currentUser, "RESTAURANT_READ");
+
+        Restaurant restaurant = restaurantRepository.findById(restaurantId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Restaurant not found"));
+
+        LocalDateTime now = LocalDateTime.now();
+        return restaurantTableRepository.findByRestaurant_Id(restaurant.getId()).stream()
+                .map(table -> RestaurantTableAvailabilityResponse.from(table, isAvailable(table, now)))
+                .toList();
+    }
+
+    // "Available" means right now, not for a requested time slot — the reservation system has no
+    // date-range availability query yet (see ADR-007's known gaps).
+    private boolean isAvailable(RestaurantTable table, LocalDateTime now) {
+        boolean hasActiveHold = tableHoldRepository.findByRestaurantTable_Id(table.getId()).stream()
+                .anyMatch(hold -> hold.getExpiresAt().isAfter(now));
+        boolean hasActiveReservation = reservationRepository.findByRestaurantTable_Id(table.getId()).stream()
+                .anyMatch(reservation -> reservation.getStatus() == ReservationStatus.ACTIVE);
+        return !hasActiveHold && !hasActiveReservation;
     }
 
     private Restaurant resolveOwnRestaurant(User currentUser) {
