@@ -105,6 +105,16 @@ The API starts on `http://localhost:8080`; the frontend dev server prints its ow
 
 Integration tests use Testcontainers to spin up a real PostgreSQL instance rather than mocking the database.
 
+## Local CI (Jenkins, learning exercise)
+
+A Jenkins instance runs locally in Docker, separate from the app's own `docker-compose.yml`, as a learning exercise (see `docs/decisions/` for the ADR). Start it with:
+
+```bash
+docker compose -f docker-compose.jenkins.yml up -d --build
+```
+
+Jenkins UI: `http://localhost:8081`. The `Jenkinsfile` at the repo root defines the pipeline (checkout → build → test) run by the `reserved-app-pipeline` job.
+
 ## Database migrations
 
 Schema changes go through Flyway, plain sequential SQL (`V1__create_core_schema.sql`, `V2__add_not_null_constraints.sql`, ...) in `src/main/resources/db/migration/`. Hibernate runs in `ddl-auto=validate` mode — it checks the schema matches the entities but never writes to it. Chosen over Liquibase for simplicity, since SQL was already a known tool.
