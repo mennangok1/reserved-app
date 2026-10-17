@@ -1,11 +1,13 @@
 package com.mennangok1.reserved.restaurantTable;
 
+import com.mennangok1.reserved.reservation.Reservation;
 import com.mennangok1.reserved.reservation.ReservationRepository;
 import com.mennangok1.reserved.reservation.ReservationStatus;
 import com.mennangok1.reserved.restaurant.Restaurant;
 import com.mennangok1.reserved.restaurant.RestaurantRepository;
 import com.mennangok1.reserved.restaurantUser.RestaurantUserRepository;
 import com.mennangok1.reserved.roleAction.PermissionService;
+import com.mennangok1.reserved.tableHold.TableHold;
 import com.mennangok1.reserved.tableHold.TableHoldRepository;
 import com.mennangok1.reserved.user.User;
 import org.springframework.http.HttpStatus;
@@ -87,17 +89,35 @@ public class RestaurantTableService {
         Restaurant ownRestaurant = resolveOwnRestaurant(currentUser);
         RestaurantTable restaurantTable = resolveOwnedTable(tableId, ownRestaurant.getId());
 
-        boolean hasActiveHold = tableHoldRepository.findByRestaurantTable_Id(restaurantTable.getId()).stream()
-                .anyMatch(hold -> hold.getExpiresAt().isAfter(LocalDateTime.now()));
+        LocalDateTime now = LocalDateTime.now();
+
+        List<TableHold> holds = tableHoldRepository.findByRestaurantTable_Id(restaurantTable.getId());
+        boolean hasActiveHold = holds.stream().anyMatch(hold -> hold.getExpiresAt().isAfter(now));
         if (hasActiveHold) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Table has an active hold and cannot be deleted");
         }
 
-        boolean hasActiveReservation = reservationRepository.findByRestaurantTable_Id(restaurantTable.getId()).stream()
-                .anyMatch(reservation -> reservation.getStatus() == ReservationStatus.ACTIVE);
+        // Only a reservation whose window hasn't elapsed yet blocks deletion — a past-dated ACTIVE
+        // reservation (status never transitions on endDate passing) shouldn't block forever. A null
+        // endDate (can't happen via ReservationRequest's @NotNull today, but allowed at the DB level)
+        // is treated as still-blocking, the conservative default.
+        List<Reservation> reservations = reservationRepository.findByRestaurantTable_Id(restaurantTable.getId());
+        boolean hasActiveReservation = reservations.stream()
+                .anyMatch(reservation -> reservation.getStatus() == ReservationStatus.ACTIVE
+                        && (reservation.getEndDate() == null || reservation.getEndDate().isAfter(now)));
         if (hasActiveReservation) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Table has an active reservation and cannot be deleted");
         }
+
+        // Detach every remaining (by now guaranteed non-blocking: expired hold, past-dated or
+        // cancelled reservation) row from the table being deleted. table_id is nullable (V13)
+        // specifically for this — without nulling these out first, Hibernate's flush-time
+        // consistency check rejects the delete as long as ANY row still references this table,
+        // regardless of what the checks above concluded.
+        holds.forEach(hold -> hold.setRestaurantTable(null));
+        tableHoldRepository.saveAll(holds);
+        reservations.forEach(reservation -> reservation.setRestaurantTable(null));
+        reservationRepository.saveAll(reservations);
 
         restaurantTableRepository.delete(restaurantTable);
     }
@@ -105,20 +125,44 @@ public class RestaurantTableService {
     // Customer-facing: lets a CUSTOMER discover a table to hold/reserve. Reuses RESTAURANT_READ
     // (not a RESTAURANT_TABLE_* action) since this is a resource-scoped "view this restaurant" read,
     // the same reasoning ADR-004 used for MenuItemService.listByRestaurant.
-    public List<RestaurantTableAvailabilityResponse> listByRestaurant(User currentUser, Long restaurantId) {
+    // startDate/endDate are optional: when both are given, availability is computed by date-range
+    // overlap instead of "right now". When neither is given, falls back to the original "right now"
+    // behavior, byte-for-byte, for backward compatibility. Giving only one is a 400.
+    public List<RestaurantTableAvailabilityResponse> listByRestaurant(
+            User currentUser, Long restaurantId, LocalDateTime startDate, LocalDateTime endDate
+    ) {
         permissionService.requirePermission(currentUser, "RESTAURANT_READ");
 
         Restaurant restaurant = restaurantRepository.findById(restaurantId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Restaurant not found"));
 
+        if ((startDate == null) != (endDate == null)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Both startDate and endDate must be provided together");
+        }
+
+        List<RestaurantTable> tables = restaurantTableRepository.findByRestaurant_Id(restaurant.getId());
+
+        if (startDate != null) {
+            return tables.stream()
+                    .map(table -> RestaurantTableAvailabilityResponse.from(table, isAvailableForRange(table, startDate, endDate)))
+                    .toList();
+        }
+
         LocalDateTime now = LocalDateTime.now();
-        return restaurantTableRepository.findByRestaurant_Id(restaurant.getId()).stream()
+        return tables.stream()
                 .map(table -> RestaurantTableAvailabilityResponse.from(table, isAvailable(table, now)))
                 .toList();
     }
 
-    // "Available" means right now, not for a requested time slot — the reservation system has no
-    // date-range availability query yet (see ADR-007's known gaps).
+    // Date-range mode: purely overlap-based against ACTIVE reservations. Deliberately ignores
+    // TableHold — a hold is a transient "right now" mutex (ADR-006) with no date fields, unrelated
+    // to a future requested window. Conscious trade-off, not an oversight.
+    private boolean isAvailableForRange(RestaurantTable table, LocalDateTime startDate, LocalDateTime endDate) {
+        return !reservationRepository.existsOverlapping(table.getId(), startDate, endDate);
+    }
+
+    // "Available" means right now, not for a requested time slot — the no-range fallback, kept for
+    // callers that haven't adopted startDate/endDate yet.
     private boolean isAvailable(RestaurantTable table, LocalDateTime now) {
         boolean hasActiveHold = tableHoldRepository.findByRestaurantTable_Id(table.getId()).stream()
                 .anyMatch(hold -> hold.getExpiresAt().isAfter(now));

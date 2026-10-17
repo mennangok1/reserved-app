@@ -86,8 +86,13 @@ class RestaurantTableServiceTest {
     }
 
     private Reservation reservationWithStatus(ReservationStatus status) {
+        return reservationWithStatus(status, null);
+    }
+
+    private Reservation reservationWithStatus(ReservationStatus status, LocalDateTime endDate) {
         Reservation reservation = new Reservation();
         reservation.setStatus(status);
+        reservation.setEndDate(endDate);
         return reservation;
     }
 
@@ -227,6 +232,30 @@ class RestaurantTableServiceTest {
     }
 
     @Test
+    void delete_detachesExpiredHoldAndHistoricalReservation_beforeDeletingTable() {
+        User restaurantUser = user(1L);
+        Restaurant ownRestaurant = restaurant(10L);
+        RestaurantTable existing = restaurantTable(100L, ownRestaurant);
+        TableHold expiredHold = holdExpiringAt(LocalDateTime.now().minusMinutes(1));
+        expiredHold.setRestaurantTable(existing);
+        Reservation pastReservation = reservationWithStatus(ReservationStatus.ACTIVE, LocalDateTime.now().minusDays(1));
+        pastReservation.setRestaurantTable(existing);
+
+        when(restaurantUserRepository.findByUser_Id(1L)).thenReturn(Optional.of(linkFor(restaurantUser, ownRestaurant)));
+        when(restaurantTableRepository.findById(100L)).thenReturn(Optional.of(existing));
+        when(tableHoldRepository.findByRestaurantTable_Id(100L)).thenReturn(List.of(expiredHold));
+        when(reservationRepository.findByRestaurantTable_Id(100L)).thenReturn(List.of(pastReservation));
+
+        restaurantTableService.delete(restaurantUser, 100L);
+
+        assertThat(expiredHold.getRestaurantTable()).isNull();
+        assertThat(pastReservation.getRestaurantTable()).isNull();
+        verify(tableHoldRepository).saveAll(List.of(expiredHold));
+        verify(reservationRepository).saveAll(List.of(pastReservation));
+        verify(restaurantTableRepository).delete(existing);
+    }
+
+    @Test
     void delete_throwsConflict_whenActiveHoldExists() {
         User restaurantUser = user(1L);
         Restaurant ownRestaurant = restaurant(10L);
@@ -262,7 +291,43 @@ class RestaurantTableServiceTest {
     }
 
     @Test
-    void delete_throwsConflict_whenActiveReservationExists() {
+    void delete_throwsConflict_whenActiveReservationEndDateIsFuture() {
+        User restaurantUser = user(1L);
+        Restaurant ownRestaurant = restaurant(10L);
+        RestaurantTable existing = restaurantTable(100L, ownRestaurant);
+
+        when(restaurantUserRepository.findByUser_Id(1L)).thenReturn(Optional.of(linkFor(restaurantUser, ownRestaurant)));
+        when(restaurantTableRepository.findById(100L)).thenReturn(Optional.of(existing));
+        when(reservationRepository.findByRestaurantTable_Id(100L))
+                .thenReturn(List.of(reservationWithStatus(ReservationStatus.ACTIVE, LocalDateTime.now().plusDays(1))));
+
+        assertThatThrownBy(() -> restaurantTableService.delete(restaurantUser, 100L))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(ex -> ((ResponseStatusException) ex).getStatusCode().value())
+                .isEqualTo(409);
+
+        verify(restaurantTableRepository, never()).delete(any());
+    }
+
+    @Test
+    void delete_succeeds_whenActiveReservationEndDateHasPassed() {
+        User restaurantUser = user(1L);
+        Restaurant ownRestaurant = restaurant(10L);
+        RestaurantTable existing = restaurantTable(100L, ownRestaurant);
+
+        when(restaurantUserRepository.findByUser_Id(1L)).thenReturn(Optional.of(linkFor(restaurantUser, ownRestaurant)));
+        when(restaurantTableRepository.findById(100L)).thenReturn(Optional.of(existing));
+        when(tableHoldRepository.findByRestaurantTable_Id(100L)).thenReturn(List.of());
+        when(reservationRepository.findByRestaurantTable_Id(100L))
+                .thenReturn(List.of(reservationWithStatus(ReservationStatus.ACTIVE, LocalDateTime.now().minusDays(1))));
+
+        restaurantTableService.delete(restaurantUser, 100L);
+
+        verify(restaurantTableRepository).delete(existing);
+    }
+
+    @Test
+    void delete_throwsConflict_whenActiveReservationEndDateIsNull() {
         User restaurantUser = user(1L);
         Restaurant ownRestaurant = restaurant(10L);
         RestaurantTable existing = restaurantTable(100L, ownRestaurant);
@@ -303,7 +368,7 @@ class RestaurantTableServiceTest {
         doThrow(new ResponseStatusException(FORBIDDEN)).when(permissionService)
                 .requirePermission(customer, "RESTAURANT_READ");
 
-        assertThatThrownBy(() -> restaurantTableService.listByRestaurant(customer, 10L))
+        assertThatThrownBy(() -> restaurantTableService.listByRestaurant(customer, 10L, null, null))
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting(ex -> ((ResponseStatusException) ex).getStatusCode().value())
                 .isEqualTo(403);
@@ -317,10 +382,63 @@ class RestaurantTableServiceTest {
 
         when(restaurantRepository.findById(10L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> restaurantTableService.listByRestaurant(customer, 10L))
+        assertThatThrownBy(() -> restaurantTableService.listByRestaurant(customer, 10L, null, null))
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting(ex -> ((ResponseStatusException) ex).getStatusCode().value())
                 .isEqualTo(404);
+    }
+
+    @Test
+    void listByRestaurant_throwsBadRequest_whenOnlyStartDateGiven() {
+        User customer = user(1L);
+        Restaurant restaurant = restaurant(10L);
+
+        when(restaurantRepository.findById(10L)).thenReturn(Optional.of(restaurant));
+
+        assertThatThrownBy(() -> restaurantTableService.listByRestaurant(customer, 10L, LocalDateTime.now(), null))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(ex -> ((ResponseStatusException) ex).getStatusCode().value())
+                .isEqualTo(400);
+
+        verify(restaurantTableRepository, never()).findByRestaurant_Id(any());
+    }
+
+    @Test
+    void listByRestaurant_throwsBadRequest_whenOnlyEndDateGiven() {
+        User customer = user(1L);
+        Restaurant restaurant = restaurant(10L);
+
+        when(restaurantRepository.findById(10L)).thenReturn(Optional.of(restaurant));
+
+        assertThatThrownBy(() -> restaurantTableService.listByRestaurant(customer, 10L, null, LocalDateTime.now()))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(ex -> ((ResponseStatusException) ex).getStatusCode().value())
+                .isEqualTo(400);
+
+        verify(restaurantTableRepository, never()).findByRestaurant_Id(any());
+    }
+
+    @Test
+    void listByRestaurant_computesAvailabilityByDateRange_whenRangeGiven() {
+        User customer = user(1L);
+        Restaurant restaurant = restaurant(10L);
+        RestaurantTable overlappingTable = restaurantTable(100L, restaurant);
+        RestaurantTable freeTable = restaurantTable(101L, restaurant);
+        LocalDateTime start = LocalDateTime.now().plusDays(1);
+        LocalDateTime end = start.plusHours(2);
+
+        when(restaurantRepository.findById(10L)).thenReturn(Optional.of(restaurant));
+        when(restaurantTableRepository.findByRestaurant_Id(10L))
+                .thenReturn(List.of(overlappingTable, freeTable));
+        when(reservationRepository.existsOverlapping(100L, start, end)).thenReturn(true);
+        when(reservationRepository.existsOverlapping(101L, start, end)).thenReturn(false);
+
+        List<RestaurantTableAvailabilityResponse> response =
+                restaurantTableService.listByRestaurant(customer, 10L, start, end);
+
+        assertThat(response).filteredOn(r -> r.id().equals(100L)).extracting(RestaurantTableAvailabilityResponse::available).containsExactly(false);
+        assertThat(response).filteredOn(r -> r.id().equals(101L)).extracting(RestaurantTableAvailabilityResponse::available).containsExactly(true);
+        verify(tableHoldRepository, never()).findByRestaurantTable_Id(any());
     }
 
     @Test
@@ -343,7 +461,7 @@ class RestaurantTableServiceTest {
                 .thenReturn(List.of(reservationWithStatus(ReservationStatus.ACTIVE)));
         when(reservationRepository.findByRestaurantTable_Id(102L)).thenReturn(List.of());
 
-        List<RestaurantTableAvailabilityResponse> response = restaurantTableService.listByRestaurant(customer, 10L);
+        List<RestaurantTableAvailabilityResponse> response = restaurantTableService.listByRestaurant(customer, 10L, null, null);
 
         assertThat(response).hasSize(3);
         assertThat(response).filteredOn(r -> r.id().equals(100L)).extracting(RestaurantTableAvailabilityResponse::available).containsExactly(false);

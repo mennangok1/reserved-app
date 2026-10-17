@@ -22,8 +22,10 @@ public class Reservation {
     @Column (name = "END_DATE")
     private LocalDateTime endDate;
 
+    // Nullable (V13): a table can be deleted once this reservation is historical/non-blocking,
+    // at which point RestaurantTableService.delete() nulls this out before the delete.
     @ManyToOne (fetch =  FetchType.LAZY)
-    @JoinColumn (name = "TABLE_ID", nullable = false)
+    @JoinColumn (name = "TABLE_ID")
     private RestaurantTable restaurantTable;
 
     @ManyToOne (fetch =  FetchType.LAZY)

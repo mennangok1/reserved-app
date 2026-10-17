@@ -188,6 +188,7 @@ class ReservationServiceTest {
 
         when(customerUserRepository.findByUser_Id(1L)).thenReturn(Optional.of(customer));
         when(tableHoldRepository.findById(10L)).thenReturn(Optional.of(existingHold));
+        when(reservationRepository.existsOverlapping(100L, start, end)).thenReturn(false);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(invocation -> {
             Reservation saved = invocation.getArgument(0);
             saved.setId(50L);
@@ -200,6 +201,29 @@ class ReservationServiceTest {
         assertThat(response.tableId()).isEqualTo(100L);
         assertThat(response.status()).isEqualTo(ReservationStatus.ACTIVE);
         verify(tableHoldRepository).delete(existingHold);
+    }
+
+    @Test
+    void create_throwsConflict_whenOverlappingActiveReservationExists() {
+        User caller = user(1L);
+        CustomerUser customer = customer(1L, caller);
+        RestaurantTable table = table(100L);
+        TableHold existingHold = hold(10L, table, customer, LocalDateTime.now().plusMinutes(3));
+        LocalDateTime start = LocalDateTime.now().plusDays(1);
+        LocalDateTime end = start.plusHours(2);
+        ReservationRequest request = new ReservationRequest(10L, start, end);
+
+        when(customerUserRepository.findByUser_Id(1L)).thenReturn(Optional.of(customer));
+        when(tableHoldRepository.findById(10L)).thenReturn(Optional.of(existingHold));
+        when(reservationRepository.existsOverlapping(100L, start, end)).thenReturn(true);
+
+        assertThatThrownBy(() -> reservationService.create(caller, request))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(ex -> ((ResponseStatusException) ex).getStatusCode().value())
+                .isEqualTo(409);
+
+        verify(reservationRepository, never()).save(any());
+        verify(tableHoldRepository, never()).delete(any());
     }
 
     @Test

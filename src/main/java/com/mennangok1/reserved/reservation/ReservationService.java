@@ -57,6 +57,10 @@ public class ReservationService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Hold has expired");
         }
 
+        if (reservationRepository.existsOverlapping(hold.getRestaurantTable().getId(), request.startDate(), request.endDate())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Table is already reserved for the requested date range");
+        }
+
         Reservation reservation = new Reservation();
         reservation.setRestaurantTable(hold.getRestaurantTable());
         reservation.setCustomerUser(customer);

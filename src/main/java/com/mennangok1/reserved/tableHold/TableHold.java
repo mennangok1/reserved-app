@@ -19,8 +19,10 @@ public class TableHold {
     @Column (name = "EXPIRES_AT")
     private LocalDateTime expiresAt;
 
+    // Nullable (V13): an expired hold that was never released can still exist when its table is
+    // deleted; RestaurantTableService.delete() nulls this out before the delete.
     @ManyToOne (fetch = FetchType.LAZY)
-    @JoinColumn (name = "TABLE_ID", nullable = false)
+    @JoinColumn (name = "TABLE_ID")
     private RestaurantTable restaurantTable;
 
     @ManyToOne (fetch = FetchType.LAZY)

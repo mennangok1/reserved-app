@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
@@ -84,9 +85,11 @@ class RestaurantController {
     @GetMapping("/{id}/tables")
     ResponseEntity<List<RestaurantTableAvailabilityResponse>> listTables(
             @AuthenticationPrincipal UserPrincipal principal,
-            @PathVariable Long id
+            @PathVariable Long id,
+            @RequestParam(required = false) LocalDateTime startDate,
+            @RequestParam(required = false) LocalDateTime endDate
     ) {
-        return ResponseEntity.ok(restaurantTableService.listByRestaurant(principal.getUser(), id));
+        return ResponseEntity.ok(restaurantTableService.listByRestaurant(principal.getUser(), id, startDate, endDate));
     }
 
     @GetMapping("/{id}/reservations")
