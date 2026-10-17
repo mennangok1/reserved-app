@@ -2,6 +2,8 @@ package com.mennangok1.reserved.restaurant;
 
 import com.mennangok1.reserved.menuItem.MenuItemResponse;
 import com.mennangok1.reserved.menuItem.MenuItemService;
+import com.mennangok1.reserved.reservation.ReservationResponse;
+import com.mennangok1.reserved.reservation.ReservationService;
 import com.mennangok1.reserved.restaurantTable.RestaurantTableAvailabilityResponse;
 import com.mennangok1.reserved.restaurantTable.RestaurantTableService;
 import com.mennangok1.reserved.user.UserPrincipal;
@@ -26,15 +28,18 @@ class RestaurantController {
     private final RestaurantService restaurantService;
     private final MenuItemService menuItemService;
     private final RestaurantTableService restaurantTableService;
+    private final ReservationService reservationService;
 
     RestaurantController(
             RestaurantService restaurantService,
             MenuItemService menuItemService,
-            RestaurantTableService restaurantTableService
+            RestaurantTableService restaurantTableService,
+            ReservationService reservationService
     ) {
         this.restaurantService = restaurantService;
         this.menuItemService = menuItemService;
         this.restaurantTableService = restaurantTableService;
+        this.reservationService = reservationService;
     }
 
     @PostMapping
@@ -82,6 +87,14 @@ class RestaurantController {
             @PathVariable Long id
     ) {
         return ResponseEntity.ok(restaurantTableService.listByRestaurant(principal.getUser(), id));
+    }
+
+    @GetMapping("/{id}/reservations")
+    ResponseEntity<List<ReservationResponse>> listReservations(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable Long id
+    ) {
+        return ResponseEntity.ok(reservationService.listByRestaurant(principal.getUser(), id));
     }
 
 }

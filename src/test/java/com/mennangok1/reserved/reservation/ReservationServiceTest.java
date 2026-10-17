@@ -2,6 +2,8 @@ package com.mennangok1.reserved.reservation;
 
 import com.mennangok1.reserved.customerUser.CustomerUser;
 import com.mennangok1.reserved.customerUser.CustomerUserRepository;
+import com.mennangok1.reserved.restaurant.Restaurant;
+import com.mennangok1.reserved.restaurant.RestaurantRepository;
 import com.mennangok1.reserved.restaurantTable.RestaurantTable;
 import com.mennangok1.reserved.roleAction.PermissionService;
 import com.mennangok1.reserved.tableHold.TableHold;
@@ -37,6 +39,8 @@ class ReservationServiceTest {
     @Mock
     private CustomerUserRepository customerUserRepository;
     @Mock
+    private RestaurantRepository restaurantRepository;
+    @Mock
     private PermissionService permissionService;
 
     @InjectMocks
@@ -53,6 +57,12 @@ class ReservationServiceTest {
         customer.setId(id);
         customer.setUser(user);
         return customer;
+    }
+
+    private Restaurant restaurant(Long id) {
+        Restaurant restaurant = new Restaurant();
+        restaurant.setId(id);
+        return restaurant;
     }
 
     private RestaurantTable table(Long id) {
@@ -242,6 +252,38 @@ class ReservationServiceTest {
 
         assertThat(existing.getStatus()).isEqualTo(ReservationStatus.PASSIVE);
         verify(reservationRepository).save(existing);
+    }
+
+    @Test
+    void listByRestaurant_returnsReservations_whenRestaurantExists() {
+        User caller = user(1L);
+        Restaurant restaurant = restaurant(200L);
+        RestaurantTable table = table(100L);
+        CustomerUser customer = customer(1L, user(1L));
+
+        when(restaurantRepository.findById(200L)).thenReturn(Optional.of(restaurant));
+        when(reservationRepository.findByRestaurantTable_Restaurant_Id(200L))
+                .thenReturn(List.of(reservation(50L, table, customer, ReservationStatus.ACTIVE)));
+
+        List<ReservationResponse> response = reservationService.listByRestaurant(caller, 200L);
+
+        assertThat(response).hasSize(1);
+        assertThat(response.get(0).id()).isEqualTo(50L);
+        verify(permissionService).requirePermission(caller, "RESERVATION_READ_ALL");
+    }
+
+    @Test
+    void listByRestaurant_throwsNotFound_whenRestaurantMissing() {
+        User caller = user(1L);
+
+        when(restaurantRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> reservationService.listByRestaurant(caller, 999L))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(ex -> ((ResponseStatusException) ex).getStatusCode().value())
+                .isEqualTo(404);
+
+        verify(reservationRepository, never()).findByRestaurantTable_Restaurant_Id(any());
     }
 
 }

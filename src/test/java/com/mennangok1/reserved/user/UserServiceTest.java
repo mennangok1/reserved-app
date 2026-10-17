@@ -4,6 +4,7 @@ import com.mennangok1.reserved.customerUser.CustomerUser;
 import com.mennangok1.reserved.customerUser.CustomerUserRepository;
 import com.mennangok1.reserved.role.Role;
 import com.mennangok1.reserved.role.RoleRepository;
+import com.mennangok1.reserved.roleAction.PermissionService;
 import com.mennangok1.reserved.security.JwtService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,15 +19,18 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.http.HttpStatus.FORBIDDEN;
 
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
@@ -43,6 +47,8 @@ class UserServiceTest {
     private AuthenticationManager authenticationManager;
     @Mock
     private JwtService jwtService;
+    @Mock
+    private PermissionService permissionService;
 
     @InjectMocks
     private UserService userService;
@@ -140,6 +146,45 @@ class UserServiceTest {
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting(ex -> ((ResponseStatusException) ex).getStatusCode().value())
                 .isEqualTo(401);
+    }
+
+    @Test
+    void listAllUsers_returnsAllUsers_excludingPassword() {
+        User caller = new User();
+        caller.setId(1L);
+        caller.setRole(customerRole());
+
+        User admin = new User();
+        admin.setId(1L);
+        admin.setName("Admin");
+        admin.setEmail("admin@reserved.local");
+        admin.setPassword("hashed");
+        admin.setRole(customerRole());
+
+        when(userRepository.findAllWithRole()).thenReturn(List.of(admin));
+
+        List<UserResponse> response = userService.listAllUsers(caller);
+
+        assertThat(response).hasSize(1);
+        assertThat(response.get(0).email()).isEqualTo("admin@reserved.local");
+        verify(permissionService).requirePermission(caller, "USER_READ");
+    }
+
+    @Test
+    void listAllUsers_throwsForbidden_whenPermissionMissing() {
+        User caller = new User();
+        caller.setId(1L);
+        caller.setRole(customerRole());
+
+        doThrow(new ResponseStatusException(FORBIDDEN)).when(permissionService)
+                .requirePermission(caller, "USER_READ");
+
+        assertThatThrownBy(() -> userService.listAllUsers(caller))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(ex -> ((ResponseStatusException) ex).getStatusCode().value())
+                .isEqualTo(403);
+
+        verify(userRepository, never()).findAllWithRole();
     }
 
 }

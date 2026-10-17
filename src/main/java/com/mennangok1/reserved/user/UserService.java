@@ -4,6 +4,7 @@ import com.mennangok1.reserved.customerUser.CustomerUser;
 import com.mennangok1.reserved.customerUser.CustomerUserRepository;
 import com.mennangok1.reserved.role.Role;
 import com.mennangok1.reserved.role.RoleRepository;
+import com.mennangok1.reserved.roleAction.PermissionService;
 import com.mennangok1.reserved.security.JwtService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -15,6 +16,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.util.List;
 
 @Service
 public class UserService {
@@ -28,6 +31,7 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
+    private final PermissionService permissionService;
 
     public UserService(
             UserRepository userRepository,
@@ -35,7 +39,8 @@ public class UserService {
             CustomerUserRepository customerUserRepository,
             PasswordEncoder passwordEncoder,
             AuthenticationManager authenticationManager,
-            JwtService jwtService
+            JwtService jwtService,
+            PermissionService permissionService
     ) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
@@ -43,6 +48,7 @@ public class UserService {
         this.passwordEncoder = passwordEncoder;
         this.authenticationManager = authenticationManager;
         this.jwtService = jwtService;
+        this.permissionService = permissionService;
     }
 
     @Transactional
@@ -99,6 +105,13 @@ public class UserService {
         String token = jwtService.generateToken(userDetails);
 
         return new LoginResponse(token);
+    }
+
+    // ADMIN-only: "views public info of all users" (CLAUDE.md). No ownership/scope check — there's
+    // no resource to scope against, ADMIN sees every user by design.
+    public List<UserResponse> listAllUsers(User currentUser) {
+        permissionService.requirePermission(currentUser, "USER_READ");
+        return userRepository.findAllWithRole().stream().map(UserResponse::from).toList();
     }
 
 }

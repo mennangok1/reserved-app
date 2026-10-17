@@ -32,6 +32,10 @@ abstract class AbstractIntegrationTest {
 
     protected static final String DEFAULT_PASSWORD = "password123";
 
+    // Seeded by V12 (no self-registration endpoint exists for ADMIN, unlike CUSTOMER/RESTAURANT_USER).
+    protected static final String SEEDED_ADMIN_EMAIL = "admin@reserved.local";
+    protected static final String SEEDED_ADMIN_PASSWORD = "password123";
+
     @Autowired
     protected MockMvc mockMvc;
 
@@ -71,6 +75,10 @@ abstract class AbstractIntegrationTest {
         LoginResponse loginResponse = objectMapper.readValue(
                 result.getResponse().getContentAsString(), LoginResponse.class);
         return loginResponse.token();
+    }
+
+    protected String loginAsSeededAdmin() throws Exception {
+        return login(SEEDED_ADMIN_EMAIL, SEEDED_ADMIN_PASSWORD);
     }
 
     protected String bearer(String token) {

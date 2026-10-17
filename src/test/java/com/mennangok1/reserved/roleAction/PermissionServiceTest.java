@@ -2,11 +2,12 @@ package com.mennangok1.reserved.roleAction;
 
 import com.mennangok1.reserved.role.Role;
 import com.mennangok1.reserved.user.User;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -19,8 +20,16 @@ class PermissionServiceTest {
     @Mock
     private RoleActionRepository roleActionRepository;
 
-    @InjectMocks
     private PermissionService permissionService;
+
+    // No Spring proxy in a plain Mockito unit test, so requirePermission's self-invocation of
+    // hasPermission needs a manually wired "self" — wiring it to the same instance is correct
+    // here since only the business logic (not the @Cacheable behavior) is under test.
+    @BeforeEach
+    void setUp() {
+        permissionService = new PermissionService(roleActionRepository, null);
+        ReflectionTestUtils.setField(permissionService, "self", permissionService);
+    }
 
     @Test
     void hasPermission_returnsTrue_whenRoleActionExists() {

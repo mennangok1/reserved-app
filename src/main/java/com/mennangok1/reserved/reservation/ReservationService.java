@@ -2,6 +2,8 @@ package com.mennangok1.reserved.reservation;
 
 import com.mennangok1.reserved.customerUser.CustomerUser;
 import com.mennangok1.reserved.customerUser.CustomerUserRepository;
+import com.mennangok1.reserved.restaurant.Restaurant;
+import com.mennangok1.reserved.restaurant.RestaurantRepository;
 import com.mennangok1.reserved.roleAction.PermissionService;
 import com.mennangok1.reserved.tableHold.TableHold;
 import com.mennangok1.reserved.tableHold.TableHoldRepository;
@@ -20,17 +22,20 @@ public class ReservationService {
     private final ReservationRepository reservationRepository;
     private final TableHoldRepository tableHoldRepository;
     private final CustomerUserRepository customerUserRepository;
+    private final RestaurantRepository restaurantRepository;
     private final PermissionService permissionService;
 
     public ReservationService(
             ReservationRepository reservationRepository,
             TableHoldRepository tableHoldRepository,
             CustomerUserRepository customerUserRepository,
+            RestaurantRepository restaurantRepository,
             PermissionService permissionService
     ) {
         this.reservationRepository = reservationRepository;
         this.tableHoldRepository = tableHoldRepository;
         this.customerUserRepository = customerUserRepository;
+        this.restaurantRepository = restaurantRepository;
         this.permissionService = permissionService;
     }
 
@@ -92,6 +97,22 @@ public class ReservationService {
 
         reservation.setStatus(ReservationStatus.PASSIVE);
         reservationRepository.save(reservation);
+    }
+
+    // ADMIN-only: "views restaurant reservations" (CLAUDE.md). Deliberately a separate action
+    // from RESERVATION_READ (which CUSTOMER already has, for their own reservations only) —
+    // reusing it here would let any customer see every other customer's bookings for a
+    // restaurant. Restaurant-existence-checked, not ownership-checked — same shape as
+    // MenuItemService/RestaurantTableService's listByRestaurant.
+    public List<ReservationResponse> listByRestaurant(User currentUser, Long restaurantId) {
+        permissionService.requirePermission(currentUser, "RESERVATION_READ_ALL");
+
+        Restaurant restaurant = restaurantRepository.findById(restaurantId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Restaurant not found"));
+
+        return reservationRepository.findByRestaurantTable_Restaurant_Id(restaurant.getId()).stream()
+                .map(ReservationResponse::from)
+                .toList();
     }
 
     private CustomerUser resolveCustomer(User currentUser) {

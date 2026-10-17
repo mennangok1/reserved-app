@@ -1,0 +1,44 @@
+services:
+  jenkins:
+    build:
+      context: ./jenkins
+      dockerfile: Dockerfile
+    container_name: reserved-jenkins
+    # Running as root sidesteps docker-group GID matching between host and
+    # container. This doesn't materially widen the security exposure: anyone
+    # with access to this container can already drive the host Docker daemon
+    # through the mounted socket below (practically host-root-equivalent)
+    # regardless of the in-container user. Acceptable for this local-only
+    # learning setup — would NOT be acceptable on a shared/production host.
+    user: root
+    # Join the default "bridge" network (not a custom Compose network).
+    # Testcontainers creates its sibling containers (Ryuk, Postgres) on the
+    # plain "bridge" network since it isn't told otherwise. Docker isolates
+    # separate bridge networks from each other, so if Jenkins stayed on a
+    # custom Compose network it could never reach those sibling containers
+    # (this is what caused "Could not connect to Ryuk at 172.17.0.1:...").
+    network_mode: bridge
+    environment:
+      # Testcontainers runs inside this container (sibling-container/DooD
+      # pattern) and can't reliably auto-detect the right address to reach
+      # the sibling containers it starts: its default guess (the bridge
+      # gateway, 172.17.0.1) hits a port-forwarding propagation race specific
+      # to Docker Desktop's VM-based networking, causing intermittent/early
+      # "connection refused" errors right after a sibling container starts.
+      # Docker Desktop's own documented fix: override the host Testcontainers
+      # connects to with host.docker.internal, its reliable route into the VM.
+      - TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal
+      # Ryuk (Testcontainers' cleanup sidecar) hit the same race. It's only a
+      # safety net for orphaned containers after an abnormal JVM crash —
+      # normal teardown already happens via Spring Boot's Testcontainers JVM
+      # shutdown hooks — so disabling it is a safe, officially supported
+      # workaround for local learning use.
+      - TESTCONTAINERS_RYUK_DISABLED=true
+    ports:
+      - "8081:8080"   # host 8081 -> avoid clashing with the app's own :8080
+    volumes:
+      - jenkins-home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  jenkins-home:
